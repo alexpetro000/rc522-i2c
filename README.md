@@ -1,7 +1,8 @@
-#RFID RC522 on Raspberry PI with NodeJS (I2C version)
+## RFID RC522 on Raspberry PI with NodeJS (I2C version)
+
 node.js module to access a rfid reader with rc522 chipset which is connected a raspberry pi
 
-##Fork of
+## Fork of
 https://github.com/ocsacesar/rc522 only modified for accessing i2c version such as RC522 I2C V1.1
 
 Note: I connected RST Pin direct to 3.3V so that the chip is always powered on. Perhaps you can use an additional GPIO pin.  
