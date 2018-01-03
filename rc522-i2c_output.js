@@ -1,5 +1,5 @@
-var rc522 = require('./build/Release/rc522');
+var rc522i2c = require('./build/Release/rc522-i2c');
 
-rc522(function(rfidTagSerialNumber) {
+rc522i2c(function(rfidTagSerialNumber) {
 	console.log(rfidTagSerialNumber);
 });

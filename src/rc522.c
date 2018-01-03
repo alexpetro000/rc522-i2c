@@ -271,18 +271,18 @@ char M500PcdConfigISOType(uint8_t   type)
 uint8_t ReadRawRC(uint8_t Address)
 {
 	char buff[2];
-	buff[0] = ((Address<<1)&0x7E)|0x80;
-	bcm2835_spi_transfern(buff,2);
-	return (uint8_t)buff[1];
+	buff[0] = Address;
+	bcm2835_i2c_write(buff, 1);
+	bcm2835_i2c_read(buff, 1);
+	return (uint8_t)buff[0];
 }
 
 void WriteRawRC(uint8_t Address, uint8_t value)
 {
 	char buff[2];
-
-	buff[0] = (char)((Address<<1)&0x7E);
+	buff[0] = (char)Address;
 	buff[1] = (char)value;
-	bcm2835_spi_transfern(buff,2);
+	bcm2835_i2c_write(buff, 2);
 }
 
 void SetBitMask(uint8_t   reg,uint8_t   mask)

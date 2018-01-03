@@ -1,7 +1,7 @@
 {
   "targets": [
     {
-      "target_name": "rc522",
+      "target_name": "rc522-i2c",
       "sources": [
         "src/rc522.c",
         "src/rfid.c",

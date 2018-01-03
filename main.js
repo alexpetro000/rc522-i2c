@@ -12,7 +12,7 @@ var mainProcessShutdown = false;
 
 var initChildProcess = function()
 {
-	child = spawn("node", [__dirname + "/" + "rc522_output.js"]);
+	child = spawn("node", [__dirname + "/" + "rc522-i2c_output.js"]);
 	var linereader = readline.createInterface(child.stdout, child.stdin);
 
 	linereader.on('line', function (rfidTagSerialNumber) {

@@ -5,8 +5,6 @@
 #include "rc522.h"
 #include "bcm2835.h"
 
-#define DEFAULT_SPI_SPEED 5000L
-
 uint8_t initRfidReader(void);
 
 char statusRfidReader;
@@ -89,20 +87,19 @@ void Init(Handle<Object> exports, Handle<Object> module) {
     NODE_SET_METHOD(module, "exports", RunCallback);
 }
 
-uint8_t initRfidReader(void) {
-    uint16_t sp;
+uint8_t initRfidReader(void)
+{
 
-    sp = (uint16_t) (250000L / DEFAULT_SPI_SPEED);
-    if (!bcm2835_init()) {
+    if (!bcm2835_init())
+    {
+        printf("Init Error\n");
         return 1;
     }
 
-    bcm2835_spi_begin();
-    bcm2835_spi_setBitOrder(BCM2835_SPI_BIT_ORDER_MSBFIRST); // The default
-    bcm2835_spi_setDataMode(BCM2835_SPI_MODE0); // The default
-    bcm2835_spi_setClockDivider(sp); // The default
-    bcm2835_spi_chipSelect(BCM2835_SPI_CS0); // The default
-    bcm2835_spi_setChipSelectPolarity(BCM2835_SPI_CS0, LOW); // the default
+    bcm2835_i2c_begin();
+    bcm2835_i2c_setClockDivider(BCM2835_I2C_CLOCK_DIVIDER_150);
+    bcm2835_i2c_setSlaveAddress(0x28);
+    bcm2835_i2c_set_baudrate(10000); //1M baudrate
     return 0;
 }
 
