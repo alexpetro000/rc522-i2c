@@ -25,7 +25,7 @@ var rc522i2c = require("rc522-i2c");
 
 console.log('Ready!!!');
 // pin RPI_V2_GPIO_P1_37 see bcm2835.h, i2c-address,callback 
-rc522i2c(26,0x28,function(rfidSerialNumber){
+rc522i2c.getSerial(26,0x28,function(rfidSerialNumber){
 	console.log(rfidSerialNumber);
 });
 ```
