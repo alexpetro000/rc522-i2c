@@ -6,7 +6,7 @@
     "rc522",
     "i2c"
   ],
-  "version": "0.1.0",
+  "version": "0.1.1",
   "repository": {
     "type": "git",
     "url": "https://github.com/epike/rc522-i2c.git"
@@ -17,14 +17,11 @@
     "clean": "((node-gyp clean) && (rm -rf node_modules)) || (exit 0)",
     "build-debug": "(node-gyp configure --debug && node-gyp rebuild --debug) || (exit 0)"
   },
-  "main": "./main",
+  "main": "./build/Release/rc522-i2c",
   "engines": {
     "node": "0.12.9"
   },
-  "dependencies": {
-  },
-  "optionalDependencies": {
-  },
+  "optionalDependencies": {},
   "gitHead": "",
   "bugs": {
     "url": "https://github.com/epike/rc522-i2c/issues"
