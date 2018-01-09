@@ -1,106 +1,197 @@
 #include <node.h>
 #include <v8.h>
 #include <unistd.h>
+#include <uv.h>
+#include <iostream>
 #include "rfid.h"
 #include "rc522.h"
 #include "bcm2835.h"
 
-uint8_t initRfidReader(void);
+using namespace std;
 
-char statusRfidReader;
-uint16_t CType = 0;
+namespace rc522ic2
+{
+using v8::Function;
+using v8::FunctionCallbackInfo;
+using v8::Isolate;
+using v8::Local;
+using v8::Object;
+using v8::Persistent;
+using v8::String;
+using v8::Value;
+
+struct Work
+{
+    uv_work_t request;
+    Persistent<Function> callback;
+    string result;
+    uint8_t gpio_rst_pin;
+    uint8_t i2c_address;
+    bool stop;
+
+    // rc522 vars
+    char rfidChipSerialNumber[23];
+    char rfidChipSerialNumberRecentlyDetected[23];
+};
+
 uint8_t serialNumber[10];
 uint8_t serialNumberLength = 0;
-uint8_t noTagFoundCount = 0;
-char rfidChipSerialNumber[23];
-char rfidChipSerialNumberRecentlyDetected[23];
-char *p;
+char statusRfidReader;
+uint16_t CType = 0;
 int loopCounter;
+uint8_t noTagFoundCount = 0;
+char *p;
 
-using namespace v8;
+uint8_t initRfidReader(uint8_t pin_rst, uint8_t i2c_address)
+{
+    if (!bcm2835_init())
+    {
+        printf("Init Error\n");
+        return 1;
+    }
+    bcm2835_gpio_fsel(pin_rst, BCM2835_GPIO_FSEL_OUTP);
+    bcm2835_gpio_set(pin_rst);
 
-void RunCallback(const FunctionCallbackInfo<Value>& args) {
-    Isolate* isolate = Isolate::GetCurrent();
-    HandleScope scope(isolate);
+    bcm2835_i2c_begin();
+    bcm2835_i2c_setClockDivider(BCM2835_I2C_CLOCK_DIVIDER_150);
+    bcm2835_i2c_setSlaveAddress(i2c_address);
+    bcm2835_i2c_set_baudrate(1000000); //1M baudrate
+    return 0;
+}
 
-    Local<Function> callback = Local<Function>::Cast(args[0]);
-    const unsigned argc = 1;
-
+/**
+  * WorkAsync function is the "middle" function which does the work.
+  * After the WorkAsync function is called, the WorkAsyncComplete function
+  * is called.
+  */
+static void WorkAsync(uv_work_t *req)
+{
+    Work *work = static_cast<Work *>(req->data);
+    uint8_t res = initRfidReader(work->gpio_rst_pin, work->i2c_address);
+    if (res == 1)
+    {
+        work->result = "Error";
+        return;
+    }
     InitRc522();
-
-    for (;;) {
+    bool running = true;
+    while (running)
+    {
         statusRfidReader = find_tag(&CType);
-        if (statusRfidReader == TAG_NOTAG) {
+        if (statusRfidReader == TAG_NOTAG)
+        {
 
             // The status that no tag is found is sometimes set even when a tag is within reach of the tag reader
             // to prevent that the reset is performed the no tag event has to take place multiple times (ger: entrprellen)
-            if (noTagFoundCount > 2) {
+            if (noTagFoundCount > 2)
+            {
                 // Sets the content of the array 'rfidChipSerialNumberRecentlyDetected' back to zero
-                memset(&rfidChipSerialNumberRecentlyDetected[0], 0, sizeof (rfidChipSerialNumberRecentlyDetected));
+                memset(&work->rfidChipSerialNumberRecentlyDetected[0], 0, sizeof(work->rfidChipSerialNumberRecentlyDetected));
                 noTagFoundCount = 0;
-            } else {
+            }
+            else
+            {
                 noTagFoundCount++;
             }
 
             usleep(200000);
             continue;
-        } else if (statusRfidReader != TAG_OK && statusRfidReader != TAG_COLLISION) {
+        }
+        else if (statusRfidReader != TAG_OK && statusRfidReader != TAG_COLLISION)
+        {
             continue;
         }
 
-        if (select_tag_sn(serialNumber, &serialNumberLength) != TAG_OK) {
+        if (select_tag_sn(serialNumber, &serialNumberLength) != TAG_OK)
+        {
             continue;
         }
 
         // Is a successful detected, the counter will be set to zero
         noTagFoundCount = 0;
 
-        p = rfidChipSerialNumber;
-        for (loopCounter = 0; loopCounter < serialNumberLength; loopCounter++) {
+        p = work->rfidChipSerialNumber;
+        for (loopCounter = 0; loopCounter < serialNumberLength; loopCounter++)
+        {
             sprintf(p, "%02x", serialNumber[loopCounter]);
             p += 2;
         }
 
         // Only when the serial number of the currently detected tag differs from the
         // recently detected tag the callback will be executed with the serial number
-        if (strcmp(rfidChipSerialNumberRecentlyDetected, rfidChipSerialNumber) != 0) {
-            Local<Value> argv[argc] = {
-                String::NewFromUtf8(isolate, &rfidChipSerialNumber[0])
-            };
-
-            callback->Call(isolate->GetCurrentContext()->Global(), argc, argv);
+        if (strcmp(work->rfidChipSerialNumberRecentlyDetected, work->rfidChipSerialNumber) != 0)
+        {
+            work->result = string(work->rfidChipSerialNumber);
+            running = false;
         }
 
         // Preserves the current detected serial number, so that it can be used
         // for future evaluations
-        strcpy(rfidChipSerialNumberRecentlyDetected, rfidChipSerialNumber);
+        strcpy(work->rfidChipSerialNumberRecentlyDetected, work->rfidChipSerialNumber);
 
         *(p++) = 0;
     }
 
-    bcm2835_spi_end();
+    bcm2835_i2c_end();
     bcm2835_close();
 }
 
-void Init(Handle<Object> exports, Handle<Object> module) {
-    initRfidReader();
-    NODE_SET_METHOD(module, "exports", RunCallback);
-}
-
-uint8_t initRfidReader(void)
+/**
+  * WorkAsyncComplete function is called once we are ready to trigger the callback
+  * function in JS.
+  */
+static void WorkAsyncComplete(uv_work_t *req, int status)
 {
+    Isolate *isolate = Isolate::GetCurrent();
 
-    if (!bcm2835_init())
+    v8::HandleScope handleScope(isolate);
+
+    Work *work = static_cast<Work *>(req->data);
+
+    const char *result = work->result.c_str();
+    Local<Value> argv[1] = {String::NewFromUtf8(isolate, result)};
+
+    // https://stackoverflow.com/questions/13826803/calling-javascript-function-from-a-c-callback-in-v8/28554065#28554065
+    Local<Function>::New(isolate, work->callback)->Call(isolate->GetCurrentContext()->Global(), 1, argv);
+
+    if (work->stop)
     {
-        printf("Init Error\n");
-        return 1;
+        work->callback.Reset();
+        delete work;
     }
-
-    bcm2835_i2c_begin();
-    bcm2835_i2c_setClockDivider(BCM2835_I2C_CLOCK_DIVIDER_150);
-    bcm2835_i2c_setSlaveAddress(0x28);
-    bcm2835_i2c_set_baudrate(10000); //1M baudrate
-    return 0;
+    else
+    {
+        uv_queue_work(uv_default_loop(), &work->request, WorkAsync, WorkAsyncComplete);
+    }
 }
 
-NODE_MODULE(rc522, Init)
+/**
+  * getSerial is the initial function called from JS. This function returns
+  * immediately, however starts a uv task which later calls the callback function
+  */
+void getSerial(const FunctionCallbackInfo<Value> &args)
+{
+    Isolate *isolate = args.GetIsolate();
+
+    Work *work = new Work();
+    work->request.data = work;
+
+    Local<Function> callback = Local<Function>::Cast(args[2]);
+    work->callback.Reset(isolate, callback);
+    work->gpio_rst_pin = args[0]->IntegerValue();
+    work->i2c_address = args[1]->IntegerValue();
+    uv_queue_work(uv_default_loop(), &work->request, WorkAsync, WorkAsyncComplete);
+
+    args.GetReturnValue().Set(Undefined(isolate));
+}
+
+/**
+  * init function declares what we will make visible to node
+  */
+void initAsync(Local<Object> exports)
+{
+    NODE_SET_METHOD(exports, "getSerial", getSerial);
+}
+
+NODE_MODULE(rc522, initAsync)
+}
