@@ -22,7 +22,7 @@ using v8::Value;
 
 struct Work
 {
-    uv_work_t request;
+
     Persistent<Function> callback;
     string result;
     uint8_t gpio_rst_pin;
@@ -161,7 +161,7 @@ static void WorkAsyncComplete(uv_work_t *req, int status)
     }
     else
     {
-        uv_queue_work(uv_default_loop(), &work->request, WorkAsync, WorkAsyncComplete);
+        uv_queue_work(uv_default_loop(), req, WorkAsync, WorkAsyncComplete);
     }
 }
 
@@ -174,13 +174,16 @@ void getSerial(const FunctionCallbackInfo<Value> &args)
     Isolate *isolate = args.GetIsolate();
 
     Work *work = new Work();
-    work->request.data = work;
 
     Local<Function> callback = Local<Function>::Cast(args[2]);
     work->callback.Reset(isolate, callback);
     work->gpio_rst_pin = args[0]->IntegerValue();
     work->i2c_address = args[1]->IntegerValue();
-    uv_queue_work(uv_default_loop(), &work->request, WorkAsync, WorkAsyncComplete);
+
+    uv_work_t *req = new uv_work_t();
+    req->data = work;
+
+    uv_queue_work(uv_default_loop(), req, WorkAsync, WorkAsyncComplete);
 
     args.GetReturnValue().Set(Undefined(isolate));
 }
