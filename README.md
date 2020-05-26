@@ -1,3 +1,6 @@
+## Features of this fork
+Callback with empty string on tag remove
+
 ## RFID RC522 on Raspberry PI with NodeJS (I2C version)
 
 node.js module to access a rfid reader with rc522 chipset which is connected a raspberry pi

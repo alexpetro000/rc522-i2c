@@ -80,41 +80,43 @@ static void WorkAsync(uv_work_t *req)
         statusRfidReader = find_tag(&CType);
         if (statusRfidReader == TAG_NOTAG)
         {
-
             // The status that no tag is found is sometimes set even when a tag is within reach of the tag reader
             // to prevent that the reset is performed the no tag event has to take place multiple times (ger: entrprellen)
-            if (noTagFoundCount > 2)
-            {
-                // Sets the content of the array 'rfidChipSerialNumberRecentlyDetected' back to zero
-                memset(&work->rfidChipSerialNumberRecentlyDetected[0], 0, sizeof(work->rfidChipSerialNumberRecentlyDetected));
-                noTagFoundCount = 0;
-            }
-            else
+            if (noTagFoundCount < 3)
             {
                 noTagFoundCount++;
-            }
 
-            usleep(200000);
-            continue;
-        }
+                usleep(100000);
+                continue;
+            }
+	    else if (noTagFoundCount == 3)
+            {
+                // Sets the content of the array 'rfidChipSerialNumberRecentlyDetected' back to zero
+                // work->rfidChipSerialNumberRecentlyDetected[0] = '\0';
+                work->rfidChipSerialNumber[0] = '\0';
+                noTagFoundCount++;
+            }
+	}
         else if (statusRfidReader != TAG_OK && statusRfidReader != TAG_COLLISION)
         {
             continue;
         }
-
-        if (select_tag_sn(serialNumber, &serialNumberLength) != TAG_OK)
+        else if (select_tag_sn(serialNumber, &serialNumberLength) != TAG_OK)
         {
             continue;
         }
+        else {
 
-        // Is a successful detected, the counter will be set to zero
-        noTagFoundCount = 0;
+            // Is a successful detected, the counter will be set to zero
+            noTagFoundCount = 0;
 
-        p = work->rfidChipSerialNumber;
-        for (loopCounter = 0; loopCounter < serialNumberLength; loopCounter++)
-        {
-            sprintf(p, "%02x", serialNumber[loopCounter]);
-            p += 2;
+            p = work->rfidChipSerialNumber;
+            for (loopCounter = 0; loopCounter < serialNumberLength; loopCounter++)
+            {
+                sprintf(p, "%02x", serialNumber[loopCounter]);
+                p += 2;
+            }
+	    *p = '\0';
         }
 
         // Only when the serial number of the currently detected tag differs from the
@@ -128,8 +130,6 @@ static void WorkAsync(uv_work_t *req)
         // Preserves the current detected serial number, so that it can be used
         // for future evaluations
         strcpy(work->rfidChipSerialNumberRecentlyDetected, work->rfidChipSerialNumber);
-
-        *(p++) = 0;
     }
 
     bcm2835_i2c_end();
